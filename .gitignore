@@ -1,0 +1,4 @@
+*.pyc
+backup/
+deleted/
+third-party/

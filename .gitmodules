@@ -1,0 +1,6 @@
+[submodule "pacs"]
+	path = pacs
+	url = git://github.com/canderson/PACS.git
+[submodule "bibtex"]
+	path = bibtex
+	url = git://github.com/canderson/python-bibtex.git
