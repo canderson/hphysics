@@ -1,9 +1,9 @@
-import sys, re
+import sys, re, os
 from BeautifulSoup import BeautifulSoup as BS
 
 sys.path.append('../bibtex/')
 
-import www, pacs, bibtex
+import www, pacs, bibtex, arxiv
 import hphys_types as ht
 
 def author_search(first, middle, last):
@@ -80,7 +80,6 @@ def pacs_keywords_parse(s):
                 dp[-1] = working
     codes_out = []
     phrases_out = []
-    print dp
     i = unitsl
     if dp[i]:
         while True:
@@ -132,6 +131,13 @@ def abstract_read(bibcode):
     #        a.honorifics.update((main_date, x[1]))
     #    out.authors = authors
 
+    # Get the text of the abstract
+    abs_start = r'<h3 align="center">                               Abstract</h3>\n'
+    m = re.search(abs_start + r'((.*?\n)*?)<hr>',ads_abs_s)
+    if m:
+        out.abstract = ht.HTMLString({"contents": m.group(1)})
+
+    # Get PACS codes and keywords
     pacs_set = set()
     keywords_set = set()
 
@@ -157,22 +163,25 @@ def abstract_read(bibcode):
             val = br.get(x)
             if val: setattr(v,x,val)
         v.url = eprint_url
-        print v.url
         pacs_set.update(re.findall(pacs.PACS_REGEX, eprint_page))
 
-    return out
-
-    # TODO. The following is not completed yet.
-
     if br.get('archiveprefix') == "arXiv":
-        arxiv_page, arxiv_url = www.open_http(ADS_TO_ARXIV)
-        entry = ht.ArxivEntry()
-        entry.arxiv_id = br.get('eprint')
-        # TODO populate
+        arxiv_id = br.get('eprint')
+        ar = arxiv.ArXivRecord(arxiv_id)
+        entry = ht.ArxivEntry({'arxiv_id': arxiv_id})
         snapshots = []
-        for x in arxiv_abs_versions(arxiv_page):
-            v = ArxivSnapshot()
-            #TODO populate
-            snapshots.append(v)
+        for i in range(0,len(ar.versions())):
+            snapshots.append(ht.ArxivSnapshot({'date': ar.versions()[i], 'comment': ar.comments()[i], 'version': i + 1}))
+        snapshots[-1].versions = ar.download(os.path.abspath("../files"))
         entry.snapshots = snapshots
-    out.arxiv_entry = entry
+        submitter = ar.submitter()
+        if submitter:
+            names = submitter.split(' ')
+            entry.submitter = ht.Name({'names': names[:-1], 'last': names[-1]})
+        c1, c_all = ar.categories()
+        if c1:
+            ar.primary_category = c1
+            ar.categories = c_all
+        out.arxiv_entry = entry
+        
+    return out

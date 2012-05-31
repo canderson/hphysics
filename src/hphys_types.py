@@ -72,21 +72,22 @@ class Person(MongoDocument):
 class Publication(MongoDocument):
     mongo_type = 'Publication'
     _mongo_params = [('publication_type','str'),
-                      ('ads_bibcode','str'),
-                      ('authors','list'), # Of ids?
-                      ('pacs_code','list'),
-                      ('keywords','list'),
-                      ('title','LatexString'),
-                      ('doi','str'),
-                      ('arxiv_entry', 'ArxivEntry'),
-                      ('published_snapshots','list')]
+                     ('ads_bibcode','str'),
+                     ('authors','list'), # Of ids?
+                     ('pacs_code','list'),
+                     ('keywords','list'),
+                     ('title','LatexString'),
+                     ('abstract','HTMLString'),
+                     ('doi','str'),
+                     ('arxiv_entry', 'ArxivEntry'),
+                     ('published_snapshots','list')]
 
 # Extended collection data
 
 class Snapshot(MongoDocument):
     mongo_type = 'Snapshot'
-    _mongo_params = [('date','MonthYear'), #MonthYear ORR datetime.date
-                      ('available_versions', 'list')]
+    _mongo_params = [('date','MonthYear'), #MonthYear ORR datetime.date ORR datetime.datetime
+                      ('versions', 'list')]
 
 class JournalSnapshot(Snapshot):
     mongo_type = 'JournalSnapshot'
@@ -101,10 +102,11 @@ class JournalSnapshot(Snapshot):
 
 class ArxivEntry(MongoDocument):
     mongo_type = 'ArxivEntry'
-    _mongo_params = [('subjects','list'),
-                      ('submitter','Person'),
-                      ('arxiv_id', 'str'),
-                      ('snapshots','list')]
+    _mongo_params = [('primary_category','str'),
+                     ('categories', 'list'), # Non-primary categories
+                     ('submitter','Person'),
+                     ('arxiv_id', 'str'),
+                     ('snapshots','list')]
 
 class ArxivSnapshot(Snapshot):
     mongo_type = 'ArxivSnapshot'
@@ -117,12 +119,16 @@ class LatexString(MongoDocument):
     mongo_type = 'LatexString'
     _mongo_params = [('contents','str')]
 
+class HTMLString(MongoDocument):
+    mongo_type = 'HTMLString'
+    _mongo_params = [('contents','str')]
+
 # To transport a human's name
 
 class Name(MongoDocument):
     mongo_type = 'Name'
     _mongo_params = [('names','list'), 
-                      ('last','LatexString'),
+                      ('last','LatexString'), #LatexString ORR HTMLString
                       ('lineage', 'str')]
 
     def permits(self, other):
