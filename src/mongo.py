@@ -11,10 +11,10 @@ _DB = 'hphysics'
 
 # If we were running a daemon, the daemon could share one connection between its threads. This is safe.
 
-def mongo_connect():
-    """Returns (connection, db) forthe Mongo DB"""
-    conn = pymongo.Connection(_HOST, _PORT)
-    db = conn[_DB]
+def mongo_connect(host=_HOST,port=_PORT,dbname=_DB):
+    """Returns (connection, db) for the Mongo DB"""
+    conn = pymongo.Connection(host, port)
+    db = conn[dbname]
     # If we want to do any transformation:
     #    db.add_son_manipulator(Transform())
     return (conn, db)
