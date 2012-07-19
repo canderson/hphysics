@@ -2,10 +2,12 @@
 # They must all implement a mongo_dump method that gives the data of the class in a dictionary of dictionaries, lists, and literals that is suitable for reprentation in JSON, yaml, MongoDB, etc. Their constructor should read-in a similar dictionary. 
 
 # WARNING : An object should not have the same mongo param from multiple sources (such as multiple ancestors)
+# WARNING : Each class must declare its own mongo params. Even if this is just an empty list. 
 
 # Allowed native types: dictionaries with string keys and valid items, lists with valid items, strings, ints, floats, datetime.datetime, re.compile, pymongo.objectid.ObjectId
 
 import sys, inspect
+import copy
 
 # A dictionary of constructors for all of the MongoDocument descendents. For use in mongo_read
 MTYPES = {}
@@ -57,22 +59,22 @@ class MongoDocument:
             out[x[0]] = mongo_read(getattr(self,x[0]))
         return out
     def mongo_params(self):
-        out = self._mongo_params
+        out = copy.copy(self._mongo_params)
         ancestors = list(self.__class__.__bases__)
         while ancestors:
             x = ancestors.pop()
             try:
                 out.extend(x._mongo_params)
                 ancestors.extend(x.__bases__)
-            except AttributeError:
-                pass
+            except AttributeError: pass
         return out
 
 # Collections
 
 class Person(MongoDocument):
     mongo_type = 'Person'
-    _mongo_params = [('names', 'HistoricalProperty'), # The way we deal with people is that we have a table of People and a table of Aliases. An Alias is any name that we saw used in the wild for that person. Of course, an alias might be associated with many people. 
+    _mongo_params = [('display_name', 'str'),
+                     ('names', 'HistoricalProperty'), # The way we deal with people is that we have a table of People and a table of Aliases. An Alias is any name that we saw used in the wild for that person. Of course, an alias might be associated with many people. 
                      ('honorifics', 'HistoricalProperty'), 
                      ('affiliations', 'HistoricalProperty'), 
                      ('emails', 'HistoricalProperty')]
@@ -86,8 +88,8 @@ class Publication(MongoDocument):
     mongo_type = 'Publication'
     _mongo_params = [('publication_type','str'),
                      ('ads_bibcode','str'),
-                     ('authors','list'), # List of ids
-                     ('pacs_code','list'),
+                     ('authors','list'), # List of [id, alias]
+                     ('pacs_codes','list'),
                      ('keywords','list'),
                      ('title','LatexString'),
                      ('abstract','HTMLString'),
@@ -142,9 +144,11 @@ class TypedString(MongoDocument):
 
 class LatexString(TypedString):
     mongo_type = 'LatexString'
+    _mongo_params = []
 
 class HTMLString(TypedString):
     mongo_type = 'HTMLString'
+    _mongo_params = []
 
 # To transport a human's name
 
@@ -154,6 +158,8 @@ class Name(MongoDocument):
     _mongo_params = [('names','list'), 
                       ('last','LatexString'), # ORR HTML TODO switch to unicode
                       ('lineage', 'str')]
+    def full_name():
+            return ' '.join(map(lambda x: x.contents, self.names)) + ' ' + self.last.contents
     
     def _compatible(self, a, b):
         """A version of self.compatible that looks only at single strings."""
@@ -169,7 +175,7 @@ class Name(MongoDocument):
         finally:
             return 0
 
-    def comptaible(self, other):
+    def compatible(self, other):
         """This function compares two names and returns a numeric code indicating the result. The codes are given below where the call was one.two:
         0 : The names are incompatible. Any other code means that they are compatible.
         1 : The names are identical.
@@ -191,7 +197,7 @@ class Name(MongoDocument):
         i = 0
         onl = len(other.names)
         for n in self.names:
-            for j range(i, onl):
+            for j in range(i, onl):
                 res = self._permits(n, other.names[j])
                 if res in [0,3]: continue # I didn't fit inside it
                 else:
@@ -215,8 +221,6 @@ class MonthYear(MongoDocument):
         _mongo_params = [('year','int'),
                           ('month','int')]
         def __init__(self, d = {}):
-                assert d['year']
-                assert d['month']
                 MongoDocument.__init__(self,d)
 
 # TODO this needs more
