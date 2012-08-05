@@ -1,12 +1,13 @@
 import urllib2
 import settings
 
-def open_http(url):
+def open_http(url,user_agent=settings.user_agent,raw=False):
     request = urllib2.Request(url)
-    request.add_header('User-Agent', settings.user_agent)
+    request.add_header('User-Agent', user_agent)
     opener = urllib2.build_opener() 
     """Tries to open an http url. Raises an error if the request fails."""
     res = opener.open(request)
+    if raw: return res
     return ''.join(res.readlines()), res.geturl()
 
 def open_http_raw(url):

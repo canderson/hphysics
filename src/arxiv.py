@@ -1,8 +1,36 @@
 import www
 import xml.dom.minidom as xdm
 import datetime
+from time import time, sleep
 # When you decide to solve a problem with regular expressions, you now have two problems.
 import re
+
+class HTTP_Opener():
+    def __init__(self):
+        self.prev_time = None
+        self.WAIT_TIME = 60 # Minimum wait, in seconds, between loading two resources.
+        self.user_agent = r'GilesBot/1.0 (downloading data for a short list of articles)'
+    def open(self,url,verbose=False):
+        """Handles all errors by crashing out."""
+        while True:
+            my_time = time()
+            if self.prev_time:
+                # If something messes with the system clock, this assert might fire:
+                assert(my_time > self.prev_time)
+                sleep(self.WAIT_TIME - min((my_time - self.prev_time), self.WAIT_TIME))
+            self.prev_time = my_time
+            try: 
+                res = www.open_http(url,self.user_agent,True)
+                if verbose:
+                    return ''.join(res.readlines()), res.geturl(), res.info()
+                else:
+                    return ''.join(res.readlines()), res.geturl()
+            except:
+                print "HTTP failed"
+                print url
+                raise
+
+http_opener = HTTP_Opener()
 
 class ArXivRecord():
     def __init__(self, aid):
@@ -25,47 +53,47 @@ class ArXivRecord():
         # We let IOErrors bubble up
         pdf_file = open(pdf_path,'w')
 
-        pdf, _ = self.open_http("http://arxiv.org/pdf/%s" % self.id)
+        pdf, _ = http_opener.open("http://arxiv.org/pdf/%s" % self.id)
         pdf_file.write(pdf)
         pdf_file.close()
 
         out.append(["pdf",pdf_path])
 
-        source, _, source_info = self.open_http("http://arxiv.org/e-print/%s" % self.id, True)
-        encoding = source_info['content-encoding']
+        if "PDF only" in self.abs_html():
+            print "No sources available."
+            return out
+
+        source, _, source_info = http_opener.open("http://arxiv.org/e-print/%s" % self.id, True)
+        try:
+            encoding = source_info['content-encoding']
+        except KeyError:
+            encoding = None
+            print "Warning: could not get source file encoding :: %s." % self.id
+            return out
+
         if encoding == 'x-gzip':
             source_path = path + "%s-source.gz"
             source_file = open( source_path % self.id,'w')
             source_file.write(source)
             source_file.close()
             out.append(['gz',source_path])
+        else:
+            print "Warning: Got a source file that was not a gzip :: %s." % self.id
 
         return out
 
     def abs_html(self):
         if not self._abs_html:
             abs_url = "http://arxiv.org/abs/%s" % self.id
-            self._abs_html, _ = self.open_http(abs_url)
+            self._abs_html, _ = http_opener.open(abs_url)
         return self._abs_html
 
     def entry_xml(self):
         if not self._entry_xml:
             atom_url = "http://export.arxiv.org/api/query?id_list=%s" % self.id
-            s, _ = self.open_http(atom_url)
+            s, _ = http_opener.open(atom_url)
             self._entry_xml = xdm.parseString(s).getElementsByTagName("entry")[0]
         return self._entry_xml
-
-    def open_http(self, url, verbose=False):
-        res = www.open_http_raw(url)
-        if verbose:
-            return ''.join(res.readlines()), res.geturl(), res.info()
-        else:
-            return ''.join(res.readlines()), res.geturl()
-        
-        
-    def set_recovery(self):
-        """If you don't want to be responsible for HTTP errors, then set the object's recovery behavior."""
-        pass
 
     def preload(self, abs_html = True, entry_xml = True):
         """Normally, remote pages are lazily loaded. However, this means that any method that collects data could raise an error (because it went to lazily load a page and failed). If you don't want to be responsible for this, then use this method to preload everything you need. Once this is done, only self.download and self.comments can still raise an HTTP error."""
@@ -109,7 +137,7 @@ class ArXivRecord():
         self._comments = []
         for i in range(1, numv + 1):
             url = "http://arxiv.org/abs/%sv%d" % (self.id, i)
-            p, _ = self.open_http(url)
+            p, _ = http_opener.open(url)
             self._abs_html_old.append(p)
             m = re.search(r'<td class="tablecell comments">(.*?)</td>', p, flags = re.MULTILINE)
             if m: 

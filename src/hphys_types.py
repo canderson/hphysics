@@ -49,7 +49,7 @@ class MongoDocument:
         for x in self.mongo_params():
             pname = x[0]
             val = d.get(pname, None)
-            if val:
+            if val != None:
                 setattr(self, pname, val)
         val = d.get('_id', None)
         setattr(self, 'id', val)
@@ -94,6 +94,7 @@ class Publication(MongoDocument):
                      ('title','LatexString'),
                      ('abstract','HTMLString'),
                      ('doi','str'),
+                     ('arxiv_id', 'str'),
                      ('arxiv_entry', 'ArxivEntry'),
                      ('published_snapshots','list')]
 
@@ -120,7 +121,6 @@ class ArxivEntry(MongoDocument):
     _mongo_params = [('primary_category','str'),
                      ('categories', 'list'), # Non-primary categories
                      ('submitter','Person'),
-                     ('arxiv_id', 'str'),
                      ('snapshots','list')]
 
 class ArxivSnapshot(Snapshot):
@@ -158,8 +158,10 @@ class Name(MongoDocument):
     _mongo_params = [('names','list'), 
                       ('last','LatexString'), # ORR HTML TODO switch to unicode
                       ('lineage', 'str')]
-    def full_name():
-            return ' '.join(map(lambda x: x.contents, self.names)) + ' ' + self.last.contents
+
+    def full_name(self):
+            names = getattr(self,"names",[])
+            return ' '.join(map(lambda x: x, names)) + ' ' + self.last
     
     def _compatible(self, a, b):
         """A version of self.compatible that looks only at single strings."""
@@ -217,11 +219,32 @@ class Name(MongoDocument):
         return not __eq__(self,other)
 
 class MonthYear(MongoDocument):
-        mongo_type="MonthYear"
-        _mongo_params = [('year','int'),
-                          ('month','int')]
-        def __init__(self, d = {}):
-                MongoDocument.__init__(self,d)
+    mongo_type="MonthYear"
+    _mongo_params = [('year','int'),
+                     ('month','int')]
+    def __init__(self, d = {}):
+        MongoDocument.__init__(self,d)
+    def __str__(self):
+        """The date is given in the format [Month-Name] Year-Number"""
+        out = []
+        numeral_to_name = {1: "January",
+                           2: "February",
+                           3: "March",
+                           4: "April",
+                           5: "May",
+                           6: "June",
+                           7: "July",
+                           8: "August",
+                           9: "September",
+                           10: "October",
+                           11: "November",
+                           12: "December"}
+        try:
+            out.append(numeral_to_name[self.month])
+        except AttributeError:
+            pass
+        out.append(str(self.year))
+        return ' '.join(out)
 
 # TODO this needs more
 class HistoricalProperty(MongoDocument):

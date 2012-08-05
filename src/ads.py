@@ -4,15 +4,18 @@ from time import time, sleep
 
 sys.path.append('../bibtex/')
 
-import www, pacs, bibtex, arxiv
+import www, bibtex, arxiv
 import hphys_types as ht
+
+# Warning, this library performs pre-computation at load time:
+# import pacs
 
 class HTTP_Opener():
     def __init__(self):
         self.prev_time = None
         self.WAIT_TIME = 10 # Minimum wait, in seconds, between loading two ADS resources.
     def open(self,url):
-        """Handles all errors by waiting ten seconds and trying again."""
+        """Handles all errors by waiting 2 seconds and trying again."""
         while True:
             my_time = time()
             if self.prev_time:
@@ -25,7 +28,7 @@ class HTTP_Opener():
                 return out
             except:
                 print "HTTP failed"
-                sleep(10)
+                sleep(2)
 
 http_opener = HTTP_Opener()
 
@@ -81,14 +84,23 @@ def affiliations_from_abstract(s):
     # re.MULTILINE means that ^ and $ match the beginning and end of a line
     auth_line = re.search('^' + auth_line_start + r'(.*?)' + auth_line_end, s, flags=re.MULTILINE)
 
+    # For book reviews, for instance, the author scheme is weird and uninteresting to us.
+    if not auth_line: return []
+
     auths = [x for x in re.findall(auth_pattern, auth_line.group(0))]
     # Each element of auths has the form "Kozlenko,&#160;D.&#160;P."
-    auths = map(lambda x: x.replace("&#160;"," ").split(", "), auths)
-    try:
-        names = x[1].split(' ')
-    except IndexError:
-        names = []
-    auths = map(lambda x: ht.Name({"names": names, "last": x[0]}),auths)
+    auths = map(lambda x: x.replace("&#160;"," ").replace(".-",". ").replace('\xc2\xa0',' ').split(", "), auths)
+
+    out = []
+    for a in auths:
+        assert(a[0]) # The last name must be non-null
+        try:
+            # An abundance of spaces would cause null middle names:
+            names = filter(lambda x: x, a[1].split(' '))
+        except IndexError:
+            names = []
+        out.append(ht.Name({"names": names, "last": a[0]}))
+    auths = out
 
     aff_line = re.search('^' + aff_line_start + r'(.*?)' + aff_line_end, s, flags=re.MULTILINE)
     if aff_line:
@@ -169,8 +181,12 @@ def abstract_read(bibcode):
     assert len(bibtex_records) == 1
     br = bibtex_records[0]
     out.publication_type = br.entry_type
+
     out.title = ht.LatexString({"contents": br.get("title")})
-    out.doi = br.get("doi")
+
+    doi = br.get("doi")
+    if doi != None:
+        out.doi = doi
 
     ## The "main" datetime. There's a risk for some error here, because ADS doesn't date its info. But we will assume that all of its info was correct at the date of publication given by the bibtex record.
     # Read date from HTML
@@ -208,27 +224,31 @@ def abstract_read(bibcode):
             val = br.get(x)
             if val: setattr(v,x,val)
 
-    if br.get('archiveprefix') == "arXiv" and TRY_ARXIV:
-        arxiv_id = br.get('eprint')
-        ar = arxiv.ArXivRecord(arxiv_id)
-        entry = ht.ArxivEntry({'arxiv_id': arxiv_id})
-        snapshots = []
-        for i in range(0,len(ar.versions())):
-            snapshots.append(ht.ArxivSnapshot({'date': ar.versions()[i], 'comment': ar.comments()[i], 'version': i + 1}))
-        snapshots[-1].versions = ar.download(os.path.abspath("../files"))
-        entry.snapshots = snapshots
-        submitter = ar.submitter()
-        if submitter:
-            names = submitter.split(' ')
-            entry.submitter = ht.Name({'names': names[:-1], 'last': names[-1]})
-        c1, c_all = ar.categories()
-        if c1:
-            ar.primary_category = c1
-            ar.categories = c_all
-        out.arxiv_entry = entry
+    if br.get('archiveprefix') == "arXiv":
+        out.arxiv_id = br.get('eprint')
+        if TRY_ARXIV:
+            out.arxiv_entry = arxiv_build(out.arxiv_id)
 
     # Now that we've looked-up online versions, we have all the PACS and keywords that we're going to get
     out.pacs_codes = list(pacs_set)
     out.keywords = list(keywords_set)
         
     return out
+
+def arxiv_build(arxiv_id,files_path="../files"):
+    ar = arxiv.ArXivRecord(arxiv_id)
+    entry = ht.ArxivEntry({'arxiv_id': arxiv_id})
+    snapshots = []
+    for i in range(0,len(ar.versions())):
+        snapshots.append(ht.ArxivSnapshot({'date': ar.versions()[i], 'comment': ar.comments()[i], 'version': i + 1}))
+    snapshots[-1].versions = ar.download(os.path.abspath(files_path))
+    entry.snapshots = snapshots
+    submitter = ar.submitter()
+    if submitter:
+        names = submitter.split(' ')
+        entry.submitter = ht.Name({'names': names[:-1], 'last': names[-1]})
+    c1, c_all = ar.categories()
+    if c1:
+        entry.primary_category = c1
+        entry.categories = c_all
+    return entry
